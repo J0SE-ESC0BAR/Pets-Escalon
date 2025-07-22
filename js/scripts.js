@@ -393,14 +393,14 @@ class PetsManager {
                 const fileName = `${Date.now()}_${file.name}`;
                 
                 const { error: uploadError } = await this.supabase.storage
-                    .from('fotos_mascotas') // Nombre de tu bucket
+                    .from('fotos-mascotas') // Nombre de tu bucket
                     .upload(fileName, file);
 
                 if (uploadError) throw uploadError;
 
                 // Obtenemos la URL pública de la imagen subida
                 const { data } = this.supabase.storage
-                    .from('fotos_mascotas')
+                    .from('fotos-mascotas')
                     .getPublicUrl(fileName);
                 
                 imageUrls.push(data.publicUrl);
