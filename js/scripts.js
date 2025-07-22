@@ -22,15 +22,13 @@ class PetsManager {
     }
 
     setupEventListeners() {
-        document.addEventListener('DOMContentLoaded', () => {
-            // Inicializar tooltips de Bootstrap
-            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            tooltipTriggerList.map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+        // Inicializar tooltips de Bootstrap
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
 
-            // Setup específico por página
-            if (document.getElementById('catalogo-mascotas')) this.setupCatalogPage();
-            if (document.getElementById('petRegistrationForm')) this.setupRegistrationPage();
-        });
+        // Setup específico por página
+        if (document.getElementById('catalogo-mascotas')) this.setupCatalogPage();
+        if (document.getElementById('petRegistrationForm')) this.setupRegistrationPage();
     }
 
     setupCatalogPage() {
@@ -269,11 +267,15 @@ class PetsManager {
             uploadArea.addEventListener(eventName, (e) => this.handleDragEvent(e, eventName));
         });
 
-        uploadArea.addEventListener('click', (e) => {
-            if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+        // Event listener SOLO para el botón
+        const uploadButton = uploadArea.querySelector('button');
+        if (uploadButton) {
+            uploadButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 imageInput.click();
-            }
-        });
+            });
+        }
 
         imageInput.addEventListener('change', (e) => this.handleImageFiles(Array.from(e.target.files)));
     }
@@ -433,10 +435,15 @@ class PetsManager {
     }
 
     validateForm() {
+        const imageInput = document.getElementById('imagenes');
         if (this.selectedImages.length === 0) {
             this.showAlert('Debes seleccionar al menos una imagen', 'warning');
+            // Marcar el campo como inválido visualmente
+            imageInput.setCustomValidity('Debes seleccionar al menos una imagen');
             return false;
         }
+        // Limpiar validación personalizada si hay imágenes
+        imageInput.setCustomValidity('');
         return true;
     }
 
