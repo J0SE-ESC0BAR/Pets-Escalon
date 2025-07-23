@@ -13,12 +13,176 @@ class PetsManager {
         
         this.selectedImages = [];
         this.maxImages = 5;
+        this.currentUser = null;
+        
+        // Variables para paginación
+        this.currentPage = 1;
+        this.itemsPerPage = 20;
+        this.totalItems = 0;
+        this.totalPages = 0;
+        
         this.init();
     }
 
-    init() {
+    async init() {
+        await this.checkAuthState();
         this.setupEventListeners();
         this.loadPageContent();
+        // Restaurar el estado de los filtros
+        this.restoreFiltersState();
+    }
+
+    // ====================================================
+    // MÉTODOS DE AUTENTICACIÓN (NUEVO)
+    // ====================================================
+
+    async checkAuthState() {
+        try {
+            const { data: { user } } = await this.supabase.auth.getUser();
+            this.currentUser = user;
+            this.updateUIForAuthState();
+        } catch (error) {
+            console.error('Error checking auth state:', error);
+        }
+    }
+
+    updateUIForAuthState() {
+        // Actualizar navbar basado en el estado de autenticación
+        this.updateNavbar();
+        
+        // Si estamos en una página que requiere autenticación y no hay usuario
+        const protectedPages = ['register-pet.html'];
+        const currentPage = window.location.pathname;
+        
+        if (protectedPages.some(page => currentPage.includes(page)) && !this.currentUser) {
+            this.showAlert('Debes iniciar sesión para acceder a esta página.', 'warning');
+            setTimeout(() => {
+                window.location.href = 'login.html';
+            }, 2000);
+        }
+    }
+
+    updateNavbar() {
+        // Buscar el navbar
+        const navbar = document.querySelector('.navbar-nav.ms-auto');
+        if (!navbar) return;
+
+        // Limpiar elementos existentes
+        navbar.innerHTML = '';
+
+        if (this.currentUser) {
+            // Usuario autenticado - mostrar menú de usuario más prominente
+            const userMenuHTML = `
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" 
+                       data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-person-circle me-2" style="font-size: 1.2rem;"></i>
+                        <span class="d-none d-md-inline">${this.currentUser.email}</span>
+                        <span class="d-md-none">Mi Cuenta</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <h6 class="dropdown-header">
+                                <i class="bi bi-person me-2"></i>
+                                ${this.currentUser.email}
+                            </h6>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="register-pet.html">
+                                <i class="bi bi-plus-circle me-2"></i>
+                                Registrar Mascota
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="pet-catalog.html">
+                                <i class="bi bi-grid-3x3-gap me-2"></i>
+                                Mis Mascotas
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item text-danger" href="#" onclick="petsManager.handleSignOut()">
+                                <i class="bi bi-box-arrow-right me-2"></i>
+                                Cerrar Sesión
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+            `;
+            navbar.insertAdjacentHTML('beforeend', userMenuHTML);
+        } else {
+            // Usuario no autenticado - mostrar opciones de login/registro
+            const authLinksHTML = `
+                <li class="nav-item">
+                    <a class="nav-link" href="login.html">
+                        <i class="bi bi-box-arrow-in-right me-1"></i>
+                        Iniciar Sesión
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link btn btn-outline-primary ms-2 px-3" href="signup.html">
+                        <i class="bi bi-person-plus me-1"></i>
+                        Registrarse
+                    </a>
+                </li>
+            `;
+            navbar.insertAdjacentHTML('beforeend', authLinksHTML);
+        }
+    }
+
+    async handleSignUp(email, password) {
+        try {
+            const { data, error } = await this.supabase.auth.signUp({ 
+                email, 
+                password,
+                options: {
+                    emailRedirectTo: window.location.origin + '/views/login.html'
+                }
+            });
+            if (error) throw error;
+            
+            this.showAlert('Registro exitoso. Revisa tu email para confirmar la cuenta.', 'success');
+            
+            // Redirigir a login después de un momento
+            setTimeout(() => {
+                window.location.href = 'login.html';
+            }, 3000);
+        } catch (error) {
+            this.showAlert(error.message, 'danger');
+        }
+    }
+
+    async handleSignIn(email, password) {
+        try {
+            const { data, error } = await this.supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            
+            this.currentUser = data.user;
+            this.showAlert('Inicio de sesión exitoso.', 'success');
+            
+            // Redirigir al catálogo
+            setTimeout(() => {
+                window.location.href = 'pet-catalog.html';
+            }, 1500);
+        } catch (error) {
+            this.showAlert(error.message, 'danger');
+        }
+    }
+
+    async handleSignOut() {
+        try {
+            await this.supabase.auth.signOut();
+            this.currentUser = null;
+            this.showAlert('Has cerrado sesión.', 'info');
+            
+            // Redirigir al inicio
+            setTimeout(() => {
+                window.location.href = '../index.html';
+            }, 1500);
+        } catch (error) {
+            this.showAlert('Error al cerrar sesión.', 'danger');
+        }
     }
 
     setupEventListeners() {
@@ -29,6 +193,75 @@ class PetsManager {
         // Setup específico por página
         if (document.getElementById('catalogo-mascotas')) this.setupCatalogPage();
         if (document.getElementById('petRegistrationForm')) this.setupRegistrationPage();
+        if (document.getElementById('loginForm')) this.setupLoginPage();
+        if (document.getElementById('signupForm')) this.setupSignupPage();
+        
+        // Setup para el estado de los filtros
+        this.setupFiltersStateManagement();
+    }
+
+    setupLoginPage() {
+        const form = document.getElementById('loginForm');
+        if (!form) return;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (form.checkValidity() === false) {
+                form.classList.add('was-validated');
+                return;
+            }
+
+            const formData = new FormData(form);
+            const email = formData.get('email');
+            const password = formData.get('password');
+
+            const submitBtn = form.querySelector('button[type="submit"]');
+            this.setButtonLoading(submitBtn, true);
+
+            await this.handleSignIn(email, password);
+            
+            this.setButtonLoading(submitBtn, false);
+        });
+    }
+
+    setupSignupPage() {
+        const form = document.getElementById('signupForm');
+        if (!form) return;
+
+        // Validación de contraseñas coincidentes
+        const password = form.querySelector('#password');
+        const confirmPassword = form.querySelector('#confirmPassword');
+
+        confirmPassword.addEventListener('input', () => {
+            if (password.value !== confirmPassword.value) {
+                confirmPassword.setCustomValidity('Las contraseñas no coinciden');
+            } else {
+                confirmPassword.setCustomValidity('');
+            }
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (form.checkValidity() === false) {
+                form.classList.add('was-validated');
+                return;
+            }
+
+            const formData = new FormData(form);
+            const email = formData.get('email');
+            const password = formData.get('password');
+
+            const submitBtn = form.querySelector('button[type="submit"]');
+            this.setButtonLoading(submitBtn, true);
+
+            await this.handleSignUp(email, password);
+            
+            this.setButtonLoading(submitBtn, false);
+        });
     }
 
     setupCatalogPage() {
@@ -43,28 +276,113 @@ class PetsManager {
     }
 
     setupFilters() {
-        const filters = ['filtro-especie', 'filtro-nombre'];
-        filters.forEach(filterId => {
-            const element = document.getElementById(filterId);
-            if (element) {
-                const event = filterId.includes('nombre') ? 'input' : 'change';
-                element.addEventListener(event, () => this.filterPets());
-            }
+        // Event listeners para checkboxes de especies
+        const speciesCheckboxes = document.querySelectorAll('#filtro-especies input[type="checkbox"]');
+        speciesCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', () => this.applyFilters());
         });
+
+        // Hacer clickeable toda el área de los checkboxes de especies
+        const speciesFormChecks = document.querySelectorAll('#filtro-especies .form-check');
+        speciesFormChecks.forEach(formCheck => {
+            formCheck.addEventListener('click', (e) => {
+                // Evitar que se dispare dos veces si ya se hizo click en el checkbox o label
+                if (e.target.type === 'checkbox' || e.target.tagName === 'LABEL') return;
+                
+                const checkbox = formCheck.querySelector('input[type="checkbox"]');
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    this.applyFilters();
+                }
+            });
+            
+            // Agregar cursor pointer para indicar que es clickeable
+            formCheck.style.cursor = 'pointer';
+        });
+
+        // Event listeners para controles deslizantes de edad
+        const ageMinSlider = document.getElementById('edad-min');
+        const ageMaxSlider = document.getElementById('edad-max');
+        
+        if (ageMinSlider && ageMaxSlider) {
+            ageMinSlider.addEventListener('input', () => {
+                this.updateAgeSliders();
+                this.applyFilters();
+            });
+            
+            ageMaxSlider.addEventListener('input', () => {
+                this.updateAgeSliders();
+                this.applyFilters();
+            });
+            
+            // Inicializar valores de los sliders
+            this.updateAgeSliders();
+        }
+    }
+
+    updateAgeSliders() {
+        const ageMinSlider = document.getElementById('edad-min');
+        const ageMaxSlider = document.getElementById('edad-max');
+        const ageMinValue = document.getElementById('edad-min-value');
+        const ageMaxValue = document.getElementById('edad-max-value');
+        
+        if (!ageMinSlider || !ageMaxSlider || !ageMinValue || !ageMaxValue) return;
+        
+        let minVal = parseInt(ageMinSlider.value);
+        let maxVal = parseInt(ageMaxSlider.value);
+        
+        // Asegurar que min no sea mayor que max
+        if (minVal > maxVal) {
+            if (ageMinSlider === document.activeElement) {
+                maxVal = minVal;
+                ageMaxSlider.value = maxVal;
+            } else {
+                minVal = maxVal;
+                ageMinSlider.value = minVal;
+            }
+        }
+        
+        // Actualizar los valores mostrados
+        ageMinValue.textContent = minVal === 0 ? '0 años' : `${minVal} ${minVal === 1 ? 'año' : 'años'}`;
+        ageMaxValue.textContent = maxVal >= 20 ? '20+ años' : `${maxVal} ${maxVal === 1 ? 'año' : 'años'}`;
     }
 
     // ====================================================
-    // MÉTODOS DE API CON SUPABASE (NUEVO)
+    // MÉTODOS DE API CON SUPABASE (ACTUALIZADO CON PAGINACIÓN)
     // ====================================================
 
-    async getPets() {
+    async getPets(page = 1, filters = {}) {
         try {
-            const { data, error } = await this.supabase
+            const offset = (page - 1) * this.itemsPerPage;
+            
+            let query = this.supabase
                 .from('mascotas')
-                .select('*')
-                .order('created_at', { ascending: false }); // Ordena por más recientes
+                .select('*', { count: 'exact' })
+                .eq('disponible', true)
+                .order('created_at', { ascending: false });
+
+            // Aplicar filtros si existen
+            if (filters.species && filters.species.length > 0) {
+                query = query.in('especie', filters.species);
+            }
+            
+            if (filters.breeds && filters.breeds.length > 0) {
+                query = query.in('tipo_raza', filters.breeds);
+            }
+            
+            if (filters.ageMin !== undefined && filters.ageMax !== undefined) {
+                query = query.gte('edad', filters.ageMin).lte('edad', filters.ageMax);
+            }
+
+            // Aplicar paginación
+            const { data, error, count } = await query
+                .range(offset, offset + this.itemsPerPage - 1);
 
             if (error) throw error;
+            
+            this.totalItems = count || 0;
+            this.totalPages = Math.ceil(this.totalItems / this.itemsPerPage);
+            
             return data;
         } catch (error) {
             console.error('Error al obtener mascotas:', error);
@@ -73,28 +391,89 @@ class PetsManager {
         }
     }
 
-    async deletePetById(id) {
-        // Opcional: Primero podrías buscar la mascota para obtener las URLs de las imágenes y eliminarlas del Storage.
+    async getAllPetsForFilters() {
         try {
+            const { data, error } = await this.supabase
+                .from('mascotas')
+                .select('tipo_raza')
+                .eq('disponible', true);
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error al obtener razas:', error);
+            return [];
+        }
+    }
+
+    async deletePetById(id) {
+        try {
+            // Verificar que el usuario sea el dueño
+            const { data: pet, error: fetchError } = await this.supabase
+                .from('mascotas')
+                .select('user_id')
+                .eq('id', id)
+                .single();
+
+            if (fetchError) throw fetchError;
+
+            if (!this.currentUser || pet.user_id !== this.currentUser.id) {
+                this.showAlert('No tienes permisos para eliminar esta mascota.', 'danger');
+                return;
+            }
+
             const { error } = await this.supabase
                 .from('mascotas')
                 .delete()
-                .eq('id', id); // eq = equals (igual a)
+                .eq('id', id);
 
             if (error) throw error;
 
             this.showAlert('Mascota eliminada correctamente', 'success');
-            this.loadCatalog(); // Recargar el catálogo para reflejar el cambio
+            this.loadCatalog();
         } catch (error) {
             console.error('Error al eliminar mascota:', error);
             this.showAlert('Error al eliminar la mascota.', 'danger');
         }
     }
 
+    async adoptPet(id) {
+        if (!this.currentUser) {
+            this.showAlert('Debes iniciar sesión para adoptar una mascota.', 'warning');
+            setTimeout(() => {
+                window.location.href = 'login.html';
+            }, 2000);
+            return;
+        }
 
-    // ====================================================
-    // MÉTODOS DE UI (SIN CAMBIOS IMPORTANTES)
-    // ====================================================
+        if (confirm('¿Estás seguro de que quieres adoptar esta mascota?')) {
+            try {
+                // Crear registro de adopción
+                const { error: adoptionError } = await this.supabase
+                    .from('adopciones')
+                    .insert([{
+                        mascota_id: id,
+                        adoptante_id: this.currentUser.id
+                    }]);
+
+                if (adoptionError) throw adoptionError;
+
+                // Marcar mascota como no disponible
+                const { error: updateError } = await this.supabase
+                    .from('mascotas')
+                    .update({ disponible: false })
+                    .eq('id', id);
+
+                if (updateError) throw updateError;
+
+                this.showAlert('¡Felicidades! Has adoptado la mascota exitosamente.', 'success');
+                this.loadCatalog(); // Recargar para remover la mascota adoptada
+            } catch (error) {
+                console.error('Error en adopción:', error);
+                this.showAlert('Error al procesar la adopción.', 'danger');
+            }
+        }
+    }
 
     showAlert(message, type = 'info', autoHide = true) {
         const alertContainer = document.querySelector('main');
@@ -130,51 +509,154 @@ class PetsManager {
     }
 
     showLoading(show = true) {
-        let loading = document.getElementById('loading-overlay');
+        let loading = document.getElementById('loading');
         if (!loading) {
+            // Crear loading overlay si no existe
             loading = document.createElement('div');
             loading.id = 'loading-overlay';
             loading.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
             loading.innerHTML = '<div class="spinner-border text-light" role="status"><span class="visually-hidden">Loading...</span></div>';
             document.body.appendChild(loading);
+        } else {
+            // Usar el loading existente del HTML
+            loading.style.display = show ? 'block' : 'none';
         }
-        loading.style.display = show ? 'flex' : 'none';
     }
 
     // ====================================================
     // MÉTODOS DEL CATÁLOGO (ACTUALIZADO)
     // ====================================================
 
-    async loadCatalog() {
+    async loadCatalog(page = 1) {
         this.showLoading(true);
-        const pets = await this.getPets() || [];
+        this.currentPage = page;
+        
+        // Obtener filtros actuales
+        const filters = this.getCurrentFilters();
+        
+        const pets = await this.getPets(page, filters) || [];
         this.renderPetCards(pets);
+        this.updatePagination();
+        
+        // Cargar razas para filtros solo en la primera página
+        if (page === 1) {
+            const allPetsForFilters = await this.getAllPetsForFilters();
+            this.populateBreedFilterFromAll(allPetsForFilters);
+        }
+        
         this.showLoading(false);
+    }
+
+    getCurrentFilters() {
+        const selectedSpecies = Array.from(document.querySelectorAll('#filtro-especies input[type="checkbox"]:checked'))
+            .map(checkbox => parseInt(checkbox.value));
+        
+        const selectedBreeds = Array.from(document.querySelectorAll('#filtro-razas input[type="checkbox"]:checked'))
+            .map(checkbox => checkbox.value);
+        
+        const ageMin = parseInt(document.getElementById('edad-min')?.value) || 0;
+        const ageMax = parseInt(document.getElementById('edad-max')?.value) || 20;
+        
+        return {
+            species: selectedSpecies.length > 0 ? selectedSpecies : undefined,
+            breeds: selectedBreeds.length > 0 ? selectedBreeds : undefined,
+            ageMin: ageMin > 0 || ageMax < 20 ? ageMin : undefined,
+            ageMax: ageMin > 0 || ageMax < 20 ? ageMax : undefined
+        };
+    }
+
+    populateBreedFilterFromAll(allPets) {
+        const breedFilterContainer = document.getElementById('filtro-razas');
+        if (!breedFilterContainer) return;
+
+        // Obtener todas las razas únicas de todas las mascotas
+        const breeds = [...new Set(allPets.map(pet => pet.tipo_raza).filter(breed => breed))].sort();
+        
+        // Limpiar contenedor
+        breedFilterContainer.innerHTML = '';
+        
+        // Agregar checkboxes de razas
+        breeds.forEach(breed => {
+            const checkboxDiv = document.createElement('div');
+            checkboxDiv.className = 'form-check';
+            checkboxDiv.innerHTML = `
+                <input class="form-check-input" type="checkbox" value="${breed}" id="raza-${breed.replace(/\s+/g, '-')}">
+                <label class="form-check-label" for="raza-${breed.replace(/\s+/g, '-')}">
+                    ${breed}
+                </label>
+            `;
+            breedFilterContainer.appendChild(checkboxDiv);
+            
+            // Agregar event listener al checkbox
+            const checkbox = checkboxDiv.querySelector('input[type="checkbox"]');
+            checkbox.addEventListener('change', () => this.applyFilters());
+            
+            // Hacer clickeable toda el área del checkbox de raza
+            checkboxDiv.addEventListener('click', (e) => {
+                // Evitar que se dispare dos veces si ya se hizo click en el checkbox o label
+                if (e.target.type === 'checkbox' || e.target.tagName === 'LABEL') return;
+                
+                checkbox.checked = !checkbox.checked;
+                this.applyFilters();
+            });
+            
+            // Agregar cursor pointer para indicar que es clickeable
+            checkboxDiv.style.cursor = 'pointer';
+        });
     }
 
     renderPetCards(pets) {
         const container = document.getElementById('catalogo-mascotas');
         const noPetsMessage = document.getElementById('sin-mascotas');
+        const paginationContainer = document.getElementById('pagination-container');
         
         if (!container) return;
 
-        if (pets.length === 0) {
+        if (pets.length === 0 && this.totalItems === 0) {
             container.innerHTML = '';
             if (noPetsMessage) noPetsMessage.style.display = 'block';
+            if (paginationContainer) paginationContainer.style.display = 'none';
+            this.updateResultsCounter(0);
             return;
         }
 
         if (noPetsMessage) noPetsMessage.style.display = 'none';
+        if (paginationContainer) paginationContainer.style.display = 'block';
         
         container.innerHTML = pets.map(pet => this.createPetCard(pet)).join('');
+        this.updatePaginationInfo();
+        // Actualizar contador con el total de mascotas encontradas (no solo las de esta página)
+        this.updateResultsCounter(this.totalItems);
     }
 
     createPetCard(pet) {
         const speciesName = this.getSpeciesName(pet.especie);
-        // Usamos la primera imagen del arreglo. Si no hay, ponemos una por defecto.
         const imageUrl = pet.imagenes && pet.imagenes.length > 0
             ? pet.imagenes[0]
             : 'https://placehold.co/400x300/e1e1e1/666?text=Sin+Foto';
+
+        // Determinar qué botones mostrar basado en el usuario actual
+        let actionButtons = '';
+        
+        if (this.currentUser) {
+            if (this.currentUser.id === pet.user_id) {
+                // Es el dueño - mostrar editar y eliminar
+                actionButtons = `
+                    <button class="btn btn-warning btn-sm" onclick="petsManager.editPet(${pet.id})" data-bs-toggle="tooltip" title="Editar"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-danger btn-sm" onclick="petsManager.confirmDelete(${pet.id})" data-bs-toggle="tooltip" title="Eliminar"><i class="bi bi-trash"></i></button>
+                `;
+            } else {
+                // No es el dueño - mostrar adoptar
+                actionButtons = `
+                    <button class="btn btn-success btn-sm" onclick="petsManager.adoptPet(${pet.id})" data-bs-toggle="tooltip" title="Adoptar"><i class="bi bi-house-heart"></i></button>
+                `;
+            }
+        } else {
+            // No está logueado - solo ver detalles
+            actionButtons = `
+                <button class="btn btn-outline-secondary btn-sm" onclick="petsManager.showLoginRequired()" data-bs-toggle="tooltip" title="Inicia sesión para adoptar"><i class="bi bi-house-heart"></i></button>
+            `;
+        }
 
         return `
             <div class="col-lg-4 col-md-6 mb-4 fade-in-up">
@@ -195,14 +677,19 @@ class PetsManager {
                     <div class="card-footer bg-transparent border-0">
                         <div class="btn-group w-100" role="group">
                             <button class="btn btn-outline-primary btn-sm" onclick="petsManager.viewDetails(${pet.id})" data-bs-toggle="tooltip" title="Ver detalles"><i class="bi bi-eye"></i></button>
-                            <button class="btn btn-success btn-sm" onclick="petsManager.adoptPet(${pet.id})" data-bs-toggle="tooltip" title="Adoptar"><i class="bi bi-house-heart"></i></button>
-                            <button class="btn btn-warning btn-sm" onclick="petsManager.editPet(${pet.id})" data-bs-toggle="tooltip" title="Editar"><i class="bi bi-pencil"></i></button>
-                            <button class="btn btn-danger btn-sm" onclick="petsManager.confirmDelete(${pet.id})" data-bs-toggle="tooltip" title="Eliminar"><i class="bi bi-trash"></i></button>
+                            ${actionButtons}
                         </div>
                     </div>
                 </div>
             </div>
         `;
+    }
+
+    showLoginRequired() {
+        this.showAlert('Debes iniciar sesión para adoptar mascotas.', 'info');
+        setTimeout(() => {
+            window.location.href = 'login.html';
+        }, 2000);
     }
 
     getSpeciesName(speciesId) {
@@ -214,20 +701,151 @@ class PetsManager {
     }
 
     filterPets() {
-        const speciesFilter = document.getElementById('filtro-especie')?.value;
-        const nameFilter = document.getElementById('filtro-nombre')?.value.toLowerCase();
+        // Obtener especies seleccionadas
+        const selectedSpecies = Array.from(document.querySelectorAll('#filtro-especies input[type="checkbox"]:checked'))
+            .map(checkbox => checkbox.value);
+        
+        // Obtener razas seleccionadas
+        const selectedBreeds = Array.from(document.querySelectorAll('#filtro-razas input[type="checkbox"]:checked'))
+            .map(checkbox => checkbox.value);
+        
+        // Obtener rango de edad
+        const ageMin = parseInt(document.getElementById('edad-min')?.value) || 0;
+        const ageMax = parseInt(document.getElementById('edad-max')?.value) || 20;
+        
         const cards = document.querySelectorAll('#catalogo-mascotas .col-lg-4');
+        let visibleCount = 0;
         
         cards.forEach(card => {
-            const title = card.querySelector('.card-title').textContent.toLowerCase();
-            const content = card.querySelector('.card-body').textContent.toLowerCase();
+            const cardData = this.extractCardData(card);
             
-            const matchesName = !nameFilter || title.includes(nameFilter);
-            const matchesSpecies = !speciesFilter || speciesFilter === 'todas' || 
-                                  content.includes(this.getSpeciesName(speciesFilter).toLowerCase());
+            // Verificar cada filtro
+            const matchesSpecies = selectedSpecies.length === 0 || 
+                                  selectedSpecies.includes(cardData.especie.toString());
             
-            card.style.display = matchesName && matchesSpecies ? 'block' : 'none';
+            const matchesBreed = selectedBreeds.length === 0 || 
+                                selectedBreeds.includes(cardData.raza);
+            
+            const matchesAge = cardData.edad >= ageMin && cardData.edad <= ageMax;
+            
+            // Mostrar solo si coincide con todos los filtros
+            const shouldShow = matchesSpecies && matchesBreed && matchesAge;
+            card.style.display = shouldShow ? 'block' : 'none';
+            
+            if (shouldShow) visibleCount++;
         });
+        
+        this.updateResultsCounter(visibleCount);
+    }
+
+    extractCardData(card) {
+        // Extraer datos de la tarjeta para filtrado
+        const cardBody = card.querySelector('.card-body');
+        const rows = cardBody.querySelectorAll('.row .col-6');
+        
+        let especie = '';
+        let raza = '';
+        let edad = 0;
+        
+        rows.forEach(col => {
+            const text = col.textContent;
+            if (text.includes('Especie:')) {
+                const speciesText = col.querySelector('strong').textContent;
+                // Convertir nombre de especie a ID
+                const speciesMap = {
+                    'Perro': '1', 'Gato': '2', 'Perico': '3', 
+                    'Tortuga': '4', 'Rata': '5', 'Pez': '6'
+                };
+                especie = speciesMap[speciesText] || '';
+            } else if (text.includes('Raza:')) {
+                raza = col.querySelector('strong').textContent;
+            } else if (text.includes('Edad:')) {
+                const ageText = col.querySelector('.badge').textContent;
+                edad = parseInt(ageText.match(/\d+/)?.[0]) || 0;
+            }
+        });
+        
+        return { especie, raza, edad };
+    }
+
+    clearFilters() {
+        // Desmarcar todos los checkboxes de especies
+        const speciesCheckboxes = document.querySelectorAll('#filtro-especies input[type="checkbox"]');
+        speciesCheckboxes.forEach(checkbox => checkbox.checked = false);
+        
+        // Desmarcar todos los checkboxes de razas
+        const breedCheckboxes = document.querySelectorAll('#filtro-razas input[type="checkbox"]');
+        breedCheckboxes.forEach(checkbox => checkbox.checked = false);
+        
+        // Resetear sliders de edad
+        const ageMinSlider = document.getElementById('edad-min');
+        const ageMaxSlider = document.getElementById('edad-max');
+        if (ageMinSlider && ageMaxSlider) {
+            ageMinSlider.value = 0;
+            ageMaxSlider.value = 20;
+            this.updateAgeSliders();
+        }
+        
+        // Aplicar filtros (resetear a página 1 y recargar)
+        this.applyFilters();
+        
+        // Mostrar mensaje de confirmación
+        this.showAlert('Filtros limpiados exitosamente', 'info');
+    }
+
+    updateResultsCounter(totalFound) {
+        const counter = document.getElementById('resultados-contador');
+        if (!counter) return;
+        
+        // Verificar si hay filtros activos
+        const filters = this.getCurrentFilters();
+        const hasActiveFilters = (filters.species && filters.species.length > 0) ||
+                                (filters.breeds && filters.breeds.length > 0) ||
+                                (filters.ageMin !== undefined && filters.ageMax !== undefined && 
+                                 (filters.ageMin > 0 || filters.ageMax < 20));
+        
+        if (totalFound === 0) {
+            if (hasActiveFilters) {
+                counter.innerHTML = '<i class="bi bi-exclamation-triangle text-warning me-1"></i>No se encontraron mascotas con estos filtros';
+                counter.className = 'text-warning fw-semibold';
+            } else {
+                counter.innerHTML = '<i class="bi bi-info-circle text-muted me-1"></i>No hay mascotas registradas';
+                counter.className = 'text-muted';
+            }
+        } else {
+            if (hasActiveFilters) {
+                const filterDescription = this.getFilterDescription(filters);
+                counter.innerHTML = `<i class="bi bi-funnel text-primary me-1"></i>Se encontraron <strong>${totalFound}</strong> mascotas${filterDescription}`;
+                counter.className = 'text-primary fw-semibold';
+            } else {
+                counter.innerHTML = `<i class="bi bi-check-circle text-success me-1"></i>Total de mascotas registradas: <strong>${totalFound}</strong>`;
+                counter.className = 'text-success fw-semibold';
+            }
+        }
+    }
+
+    getFilterDescription(filters) {
+        const descriptions = [];
+        
+        if (filters.species && filters.species.length > 0) {
+            const speciesNames = filters.species.map(id => this.getSpeciesName(id));
+            descriptions.push(`especies: ${speciesNames.join(', ')}`);
+        }
+        
+        if (filters.breeds && filters.breeds.length > 0) {
+            descriptions.push(`razas: ${filters.breeds.join(', ')}`);
+        }
+        
+        if (filters.ageMin !== undefined && filters.ageMax !== undefined && 
+            (filters.ageMin > 0 || filters.ageMax < 20)) {
+            if (filters.ageMin === filters.ageMax) {
+                descriptions.push(`edad: ${filters.ageMin} ${filters.ageMin === 1 ? 'año' : 'años'}`);
+            } else {
+                descriptions.push(`edad: ${filters.ageMin}-${filters.ageMax} años`);
+            }
+        }
+        
+        return descriptions.length > 0 ? ` con filtros aplicados (${descriptions.join(', ')})` : '';
     }
 
     // ====================================================
@@ -236,12 +854,6 @@ class PetsManager {
 
     viewDetails(id) {
         this.showAlert(`Viendo detalles de la mascota #${id}`, 'info');
-    }
-
-    adoptPet(id) {
-        if (confirm('¿Estás seguro de que quieres adoptar esta mascota?')) {
-            this.showAlert(`¡Felicidades! Has iniciado el proceso de adopción para la mascota #${id}`, 'success');
-        }
     }
 
     editPet(id) {
@@ -381,6 +993,15 @@ class PetsManager {
     async handleRegistration(event) {
         if (!this.validateForm()) return;
 
+        // Verificar que el usuario esté autenticado
+        if (!this.currentUser) {
+            this.showAlert('Debes iniciar sesión para registrar mascotas.', 'warning');
+            setTimeout(() => {
+                window.location.href = 'login.html';
+            }, 2000);
+            return;
+        }
+
         const form = event.target;
         const submitBtn = form.querySelector('button[type="submit"]');
         this.setButtonLoading(submitBtn, true);
@@ -416,7 +1037,9 @@ class PetsManager {
                     tipo_raza: formData.get('tipo_raza'),
                     peso: parseFloat(formData.get('peso')),
                     edad: parseInt(formData.get('edad'), 10),
-                    imagenes: imageUrls // Guardamos el arreglo de URLs
+                    imagenes: imageUrls,
+                    user_id: this.currentUser.id, // Asignar al usuario actual
+                    disponible: true // Por defecto disponible
                 }]);
 
             if (insertError) throw insertError;
@@ -461,6 +1084,177 @@ class PetsManager {
     loadPageContent() {
         if (window.location.pathname.includes('pet-catalog')) {
             document.title = 'Catálogo de Mascotas - Pets Escalón';
+        }
+    }
+
+    // ====================================================
+    // MÉTODOS DE PAGINACIÓN
+    // ====================================================
+
+    updatePagination() {
+        const paginationContainer = document.getElementById('pagination');
+        if (!paginationContainer || this.totalPages <= 1) {
+            document.getElementById('pagination-container').style.display = 'none';
+            return;
+        }
+
+        document.getElementById('pagination-container').style.display = 'block';
+        
+        let paginationHTML = '';
+        
+        // Botón anterior
+        const prevDisabled = this.currentPage === 1 ? 'disabled' : '';
+        paginationHTML += `
+            <li class="page-item ${prevDisabled}">
+                <button class="page-link" onclick="petsManager.goToPage(${this.currentPage - 1})" ${prevDisabled ? 'disabled' : ''}>
+                    <i class="bi bi-chevron-left"></i> Anterior
+                </button>
+            </li>
+        `;
+        
+        // Números de página
+        const startPage = Math.max(1, this.currentPage - 2);
+        const endPage = Math.min(this.totalPages, this.currentPage + 2);
+        
+        if (startPage > 1) {
+            paginationHTML += `
+                <li class="page-item">
+                    <button class="page-link" onclick="petsManager.goToPage(1)">1</button>
+                </li>
+            `;
+            if (startPage > 2) {
+                paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            }
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const active = i === this.currentPage ? 'active' : '';
+            paginationHTML += `
+                <li class="page-item ${active}">
+                    <button class="page-link" onclick="petsManager.goToPage(${i})">${i}</button>
+                </li>
+            `;
+        }
+        
+        if (endPage < this.totalPages) {
+            if (endPage < this.totalPages - 1) {
+                paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            }
+            paginationHTML += `
+                <li class="page-item">
+                    <button class="page-link" onclick="petsManager.goToPage(${this.totalPages})">${this.totalPages}</button>
+                </li>
+            `;
+        }
+        
+        // Botón siguiente
+        const nextDisabled = this.currentPage === this.totalPages ? 'disabled' : '';
+        paginationHTML += `
+            <li class="page-item ${nextDisabled}">
+                <button class="page-link" onclick="petsManager.goToPage(${this.currentPage + 1})" ${nextDisabled ? 'disabled' : ''}>
+                    Siguiente <i class="bi bi-chevron-right"></i>
+                </button>
+            </li>
+        `;
+        
+        paginationContainer.innerHTML = paginationHTML;
+    }
+
+    updatePaginationInfo() {
+        const infoElement = document.getElementById('pagination-info');
+        if (!infoElement) return;
+        
+        if (this.totalItems === 0) {
+            infoElement.textContent = 'No hay mascotas disponibles';
+            return;
+        }
+        
+        const start = (this.currentPage - 1) * this.itemsPerPage + 1;
+        const end = Math.min(this.currentPage * this.itemsPerPage, this.totalItems);
+        
+        infoElement.innerHTML = `
+            Mostrando <strong>${start}-${end}</strong> de <strong>${this.totalItems}</strong> mascotas
+        `;
+    }
+
+    goToPage(page) {
+        if (page < 1 || page > this.totalPages || page === this.currentPage) return;
+        
+        // Scroll to top suavemente
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        
+        this.loadCatalog(page);
+    }
+
+    // Actualizar método de filtros para trabajar con paginación
+    applyFilters() {
+        // Resetear a la primera página cuando se aplican filtros
+        this.currentPage = 1;
+        this.loadCatalog(1);
+    }
+
+    // ====================================================
+    // MÉTODOS PARA MANEJO DEL ESTADO DE FILTROS
+    // ====================================================
+
+    setupFiltersStateManagement() {
+        const filtersCollapse = document.getElementById('filtrosCollapse');
+        const filterChevron = document.getElementById('filter-chevron');
+        
+        if (!filtersCollapse || !filterChevron) return;
+
+        // Escuchar eventos de show/hide del collapse
+        filtersCollapse.addEventListener('show.bs.collapse', () => {
+            // Guardar estado expandido
+            localStorage.setItem('filtersExpanded', 'true');
+            // Rotar el chevron
+            filterChevron.style.transform = 'rotate(180deg)';
+        });
+
+        filtersCollapse.addEventListener('hide.bs.collapse', () => {
+            // Guardar estado contraído
+            localStorage.setItem('filtersExpanded', 'false');
+            // Restaurar el chevron
+            filterChevron.style.transform = 'rotate(0deg)';
+        });
+    }
+
+    restoreFiltersState() {
+        const filtersCollapse = document.getElementById('filtrosCollapse');
+        const filterChevron = document.getElementById('filter-chevron');
+        
+        if (!filtersCollapse || !filterChevron) return;
+
+        // Obtener el estado guardado
+        const isExpanded = localStorage.getItem('filtersExpanded');
+        
+        // Si no hay estado guardado, usar el valor por defecto (contraído)
+        if (isExpanded === null) {
+            localStorage.setItem('filtersExpanded', 'false');
+            return;
+        }
+
+        // Aplicar el estado guardado
+        if (isExpanded === 'true') {
+            // Expandir sin animación
+            filtersCollapse.classList.add('show');
+            filterChevron.style.transform = 'rotate(180deg)';
+            
+            // Actualizar el aria-expanded del botón
+            const filterButton = document.querySelector('[data-bs-target="#filtrosCollapse"]');
+            if (filterButton) {
+                filterButton.setAttribute('aria-expanded', 'true');
+            }
+        } else {
+            // Asegurar que esté contraído
+            filtersCollapse.classList.remove('show');
+            filterChevron.style.transform = 'rotate(0deg)';
+            
+            // Actualizar el aria-expanded del botón
+            const filterButton = document.querySelector('[data-bs-target="#filtrosCollapse"]');
+            if (filterButton) {
+                filterButton.setAttribute('aria-expanded', 'false');
+            }
         }
     }
 }

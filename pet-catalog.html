@@ -13,7 +13,7 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-light bg-light sticky-top shadow-sm">
         <div class="container">
-            <a class="navbar-brand fw-bold text-primary" href="./../index.html">
+            <a class="navbar-brand fw-bold text-primary" href="./index.html">
                 <i class="bi bi-tux me-2"></i>Pets Escalón
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -22,7 +22,7 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link active" href="./pet-catalog.html">
+                        <a class="nav-link" href="./pet-catalog.html">
                             <i class="bi bi-grid-3x3-gap me-1"></i>Catálogo
                         </a>
                     </li>
@@ -37,17 +37,16 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="./about.html">
+                        <a class="nav-link active" href="./about.html">
                             <i class="bi bi-info-circle me-1"></i>Acerca
                         </a>
                     </li>
                 </ul>
-                <form class="d-flex" role="search">
-                    <input class="form-control me-2" type="search" placeholder="Buscar..." aria-label="Search">
-                    <button class="btn btn-outline-primary" type="submit">
-                        <i class="bi bi-search"></i>
-                    </button>
-                </form>
+                
+                <!-- User Menu Area - Se actualiza dinámicamente via JavaScript -->
+                <ul class="navbar-nav ms-auto">
+                    <!-- Los elementos de autenticación se insertan aquí dinámicamente -->
+                </ul>
             </div>
         </div>
     </nav>
@@ -76,31 +75,124 @@
         <!-- Filters Section -->
         <div class="card mb-4 border-0 shadow-sm">
             <div class="card-body">
-                <h5 class="card-title text-primary mb-3">
-                    <i class="bi bi-funnel me-2"></i>Filtrar Mascotas
-                </h5>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label for="filtro-nombre" class="form-label fw-semibold">Buscar por nombre:</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light">
-                                <i class="bi bi-search"></i>
-                            </span>
-                            <input type="text" class="form-control" id="filtro-nombre" 
-                                   placeholder="Escribe el nombre de la mascota...">
-                        </div>
+                <!-- Header con botón de colapsar -->
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h5 class="card-title text-primary mb-0">
+                        <i class="bi bi-funnel me-2"></i>Filtrar Mascotas
+                    </h5>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="petsManager.clearFilters()">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Limpiar Filtros
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" 
+                                type="button" 
+                                data-bs-toggle="collapse" 
+                                data-bs-target="#filtrosCollapse" 
+                                aria-expanded="false" 
+                                aria-controls="filtrosCollapse">
+                            <i class="bi bi-chevron-down transition-icon" id="filter-chevron"></i>
+                            <span class="d-none d-md-inline ms-1">Filtros</span>
+                        </button>
                     </div>
-                    <div class="col-md-6">
-                        <label for="filtro-especie" class="form-label fw-semibold">Filtrar por especie:</label>
-                        <select class="form-select" id="filtro-especie">
-                            <option value="todas">🌟 Todas las especies</option>
-                            <option value="1">🐕 Perros</option>
-                            <option value="2">🐱 Gatos</option>
-                            <option value="3">🦜 Pericos</option>
-                            <option value="4">🐢 Tortugas</option>
-                            <option value="5">🐀 Ratas</option>
-                            <option value="6">🐠 Peces</option>
-                        </select>
+                </div>
+
+                <!-- Contenido collapsible de filtros -->
+                <div class="collapse" id="filtrosCollapse">
+                    <!-- Filtros por categorías -->
+                    <div class="row g-4">
+                        <!-- Filtro por Especie -->
+                        <div class="col-lg-4 col-md-6">
+                            <label class="form-label fw-semibold mb-3">
+                                <i class="bi bi-collection me-1"></i>Especies:
+                            </label>
+                            <div class="d-flex flex-column gap-2" id="filtro-especies">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="1" id="especie-1">
+                                    <label class="form-check-label" for="especie-1">
+                                        🐕 Perros
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="2" id="especie-2">
+                                    <label class="form-check-label" for="especie-2">
+                                        🐱 Gatos
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="3" id="especie-3">
+                                    <label class="form-check-label" for="especie-3">
+                                        🕊 Ave
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="4" id="especie-4">
+                                    <label class="form-check-label" for="especie-4">
+                                        🦎 Geco
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="5" id="especie-5">
+                                    <label class="form-check-label" for="especie-5">
+                                        🐢 Tortugas
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="6" id="especie-6">
+                                    <label class="form-check-label" for="especie-6">
+                                        🐀 Roedores
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="7" id="especie-7">
+                                    <label class="form-check-label" for="especie-7">
+                                        🐠 Peces
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="8" id="especie-8">
+                                    <label class="form-check-label" for="especie-8">
+                                        🐄 Ganado
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Filtro por Raza -->
+                        <div class="col-lg-4 col-md-6">
+                            <label class="form-label fw-semibold mb-3">
+                                <i class="bi bi-tag me-1"></i>Razas:
+                            </label>
+                            <div class="d-flex flex-column gap-2" id="filtro-razas" style="max-height: 180px; overflow-y: auto;">
+                                <!-- Las opciones se llenarán dinámicamente según las mascotas disponibles -->
+                            </div>
+                        </div>
+                        
+                        <!-- Filtro por Edad -->
+                        <div class="col-lg-4 col-md-12">
+                            <label class="form-label fw-semibold mb-3">
+                                <i class="bi bi-calendar me-1"></i>Rango de Edad:
+                            </label>
+                            <div class="age-filter-container">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">🐾 0 años</span>
+                                    <span class="text-muted small">🧓 20+ años</span>
+                                </div>
+                                <div class="range-slider-container position-relative">
+                                    <input type="range" class="form-range" id="edad-min" min="0" max="20" value="0" step="1">
+                                    <input type="range" class="form-range position-absolute" id="edad-max" min="0" max="20" value="20" step="1" style="top: 0;">
+                                </div>
+                                <div class="d-flex justify-content-between mt-2">
+                                    <div class="text-center">
+                                        <small class="text-muted">Mín:</small>
+                                        <div class="fw-bold text-primary" id="edad-min-value">0 años</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <small class="text-muted">Máx:</small>
+                                        <div class="fw-bold text-primary" id="edad-max-value">20+ años</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -108,20 +200,37 @@
 
         <!-- Loading Indicator -->
         <div id="loading" class="text-center py-5" style="display: none;">
-            <div class="spinner-border text-primary" role="status">
+            <div class="spinner-border text-primary" role="status"></div>
                 <span class="visually-hidden">Cargando...</span>
             </div>
-            <p class="mt-3 text-muted">Cargando mascotas...</p>
         </div>
 
+        <!-- Contador de resultados -->
+        <div class="mt-4 pt-3">
+            <small class="text-muted"></small>
+                <span id="resultados-contador">Mostrando todas las mascotas</span>
+            </small>
+        </div>
         <!-- Pet Catalog -->
         <div class="row g-4" id="catalogo-mascotas">
             <!-- El contenido dinámico de las mascotas se cargará aquí -->
         </div>
 
+        <!-- Pagination -->
+        <nav aria-label="Navegación de páginas de mascotas" id="pagination-container" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mt-4">
+                <div class="text-muted small">
+                    <span id="pagination-info">Mostrando 1-20 de 0 mascotas</span>
+                </div>
+                <ul class="pagination pagination-sm mb-0" id="pagination">
+                    <!-- Los botones de paginación se generarán dinámicamente -->
+                </ul>
+            </div>
+        </nav>
+
         <!-- No Pets Message -->
         <div class="text-center py-5" id="sin-mascotas" style="display: none;">
-            <div class="bg-light rounded-4 p-5">
+            <div class="bg-light rounded-4 p-5"></div>
                 <i class="bi bi-exclamation-circle display-1 text-muted mb-4"></i>
                 <h3 class="text-muted mb-3">No hay mascotas disponibles</h3>
                 <p class="text-muted mb-4">¡Sé el primero en registrar una mascota!</p>
