@@ -1,15 +1,18 @@
 // Pets Escalón - Sistema de gestión de mascotas
 // Código adaptado para funcionar con Supabase
 
+// Configuración de entorno
+const CONFIG = {
+    SUPABASE_URL: 'https://zsxsnfpeztegtabzcvbv.supabase.co',
+    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzeHNuZnBlenRlZ3RhYnpjdmJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwOTQwMzYsImV4cCI6MjA2ODY3MDAzNn0.kFZSb0_6moaIMpA2Ijs2oYGtOzCNbpDwEX_FV6RYjMo',
+    PRODUCTION_URL: 'https://jaem.dev/Pets-Escalon',
+    isProduction: () => window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+};
+
 class PetsManager {
     constructor() {
-        // Claves de tu proyecto "Pets Escalon"
-        const supabaseUrl = 'https://zsxsnfpeztegtabzcvbv.supabase.co';
-        // ¡IMPORTANTE! Reemplaza la siguiente línea con tu propia llave pública de Supabase
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzeHNuZnBlenRlZ3RhYnpjdmJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwOTQwMzYsImV4cCI6MjA2ODY3MDAzNn0.kFZSb0_6moaIMpA2Ijs2oYGtOzCNbpDwEX_FV6RYjMo'; 
-
         // Inicializa el cliente de Supabase
-        this.supabase = supabase.createClient(supabaseUrl, supabaseKey);
+        this.supabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
         
         this.selectedImages = [];
         this.maxImages = 5;
@@ -20,6 +23,13 @@ class PetsManager {
         this.itemsPerPage = 20;
         this.totalItems = 0;
         this.totalPages = 0;
+        
+        // Detectar si estamos en producción o desarrollo
+        this.isProduction = CONFIG.isProduction();
+        this.baseUrl = this.isProduction ? CONFIG.PRODUCTION_URL : window.location.origin;
+        
+        console.log(`Modo: ${this.isProduction ? 'Producción' : 'Desarrollo'}`);
+        console.log(`Base URL: ${this.baseUrl}`);
         
         this.init();
     }
@@ -38,11 +48,26 @@ class PetsManager {
 
     async checkAuthState() {
         try {
-            const { data: { user } } = await this.supabase.auth.getUser();
-            this.currentUser = user;
+            // Mejorar el manejo de errores de autenticación
+            const { data: { user }, error } = await this.supabase.auth.getUser();
+            
+            if (error) {
+                console.warn('Auth check error:', error.message);
+                // No mostrar error si es solo que no hay usuario autenticado
+                if (!error.message.includes('No JWT present')) {
+                    console.error('Error checking auth state:', error);
+                }
+                this.currentUser = null;
+            } else {
+                this.currentUser = user;
+                console.log('Usuario autenticado:', user?.email || 'Ninguno');
+            }
+            
             this.updateUIForAuthState();
         } catch (error) {
             console.error('Error checking auth state:', error);
+            this.currentUser = null;
+            this.updateUIForAuthState();
         }
     }
 
@@ -137,11 +162,16 @@ class PetsManager {
                 email, 
                 password,
                 options: {
-                    emailRedirectTo: window.location.origin + '/views/login.html'
+                    emailRedirectTo: `${this.baseUrl}/login.html`,
+                    data: {
+                        // Datos adicionales del usuario si los necesitas
+                    }
                 }
             });
+            
             if (error) throw error;
             
+            console.log('Signup successful:', data);
             this.showAlert('Registro exitoso. Revisa tu email para confirmar la cuenta.', 'success');
             
             // Redirigir a login después de un momento
@@ -149,16 +179,22 @@ class PetsManager {
                 window.location.href = 'login.html';
             }, 3000);
         } catch (error) {
-            this.showAlert(error.message, 'danger');
+            console.error('Signup error:', error);
+            this.showAlert(`Error en el registro: ${error.message}`, 'danger');
         }
     }
 
     async handleSignIn(email, password) {
         try {
-            const { data, error } = await this.supabase.auth.signInWithPassword({ email, password });
+            const { data, error } = await this.supabase.auth.signInWithPassword({ 
+                email, 
+                password 
+            });
+            
             if (error) throw error;
             
             this.currentUser = data.user;
+            console.log('Login successful:', data.user.email);
             this.showAlert('Inicio de sesión exitoso.', 'success');
             
             // Redirigir al catálogo
@@ -166,7 +202,21 @@ class PetsManager {
                 window.location.href = 'pet-catalog.html';
             }, 1500);
         } catch (error) {
-            this.showAlert(error.message, 'danger');
+            console.error('Login error:', error);
+            let errorMessage = 'Error en el inicio de sesión';
+            
+            // Personalizar mensajes de error
+            if (error.message.includes('Invalid login credentials')) {
+                errorMessage = 'Credenciales inválidas. Verifica tu email y contraseña.';
+            } else if (error.message.includes('Email not confirmed')) {
+                errorMessage = 'Debes confirmar tu email antes de iniciar sesión.';
+            } else if (error.message.includes('Too many requests')) {
+                errorMessage = 'Demasiados intentos. Espera unos minutos e intenta de nuevo.';
+            } else {
+                errorMessage = error.message;
+            }
+            
+            this.showAlert(errorMessage, 'danger');
         }
     }
 
@@ -176,9 +226,9 @@ class PetsManager {
             this.currentUser = null;
             this.showAlert('Has cerrado sesión.', 'info');
             
-            // Redirigir al inicio
+            // Redirigir al inicio - corregir la ruta
             setTimeout(() => {
-                window.location.href = '../index.html';
+                window.location.href = 'index.html';
             }, 1500);
         } catch (error) {
             this.showAlert('Error al cerrar sesión.', 'danger');
@@ -378,7 +428,12 @@ class PetsManager {
             const { data, error, count } = await query
                 .range(offset, offset + this.itemsPerPage - 1);
 
-            if (error) throw error;
+            if (error) {
+                console.error('Database error:', error);
+                throw error;
+            }
+            
+            console.log(`Loaded ${data?.length || 0} pets from database`);
             
             this.totalItems = count || 0;
             this.totalPages = Math.ceil(this.totalItems / this.itemsPerPage);
@@ -386,7 +441,16 @@ class PetsManager {
             return data;
         } catch (error) {
             console.error('Error al obtener mascotas:', error);
-            this.showAlert('No se pudieron cargar las mascotas.', 'danger');
+            
+            // Proporcionar mensaje más específico según el error
+            let errorMessage = 'No se pudieron cargar las mascotas.';
+            if (error.message.includes('JWT')) {
+                errorMessage = 'Problema de autenticación. Intenta refrescar la página.';
+            } else if (error.message.includes('permission')) {
+                errorMessage = 'Sin permisos para acceder a los datos.';
+            }
+            
+            this.showAlert(errorMessage, 'danger');
             return null;
         }
     }
