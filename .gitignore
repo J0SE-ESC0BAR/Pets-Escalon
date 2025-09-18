@@ -8,13 +8,13 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
-*.swo
+#*.swo
 
 # Archivos temporales
-*~
-.temp/
+#*~
+#.temp/
 
 # Archivos de respaldo
-*.bak
-*.backup
-SupaBasePolices.png
+#*.bak
+#*.backup
+#SupaBasePolices.png
